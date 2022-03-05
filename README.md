@@ -14,3 +14,20 @@ Now go to `localhost:8080` or wherever you've hosted it and you will have a file
 To access the beatmaps database go to `localhost:8080/packages.json`
 
 To access currently processing submissions,go to `localhost:8080/submissions.json` (may be empty)
+
+
+# CustomBeatmapsv2 conversion
+
+1) Go to the `#beatmaps-archive` channel on a browser
+2) Run the following into the developer console (don't trust anyone who tells you to do this unless you analyze the code and know what it does)
+```js
+var downloads = document.getElementsByClassName('anchor-1MIwyf anchorUnderlineOnHover-2qPutX downloadWrapper-1Cy2Fi')
+var result = ""
+for (let i = 0; i < downloads.length; ++i) {
+    result += downloads[i].href + "\n"
+}
+let blob = new Blob([result], {type: 'text/plain'});
+URL.createObjectURL(blob)
+```
+3) Open the link generated in the console and copy the resulting contents into `legacy-archive.txt`
+4) Run `npm run download-legacy`

@@ -1,4 +1,4 @@
-import { Client, Intents, Message, MessageActionRow, MessageButton, MessageEmbed, TextChannel } from 'discord.js'
+import { Client, Intents, Message, MessageActionRow, MessageButton, MessageEmbed, TextChannel, GuildMember } from 'discord.js'
 import { readFileSync } from "fs";
 
 import { IBeatmapSubmission } from './data'
@@ -14,7 +14,8 @@ export const runClient = ({onAcceptBeatmap, onPostSubmission, onRejectSubmission
         intents: [Intents.FLAGS.GUILDS, Intents.FLAGS.GUILD_MESSAGES, Intents.FLAGS.GUILD_MESSAGE_REACTIONS]
     })
 
-    const config = JSON.parse(readFileSync('config.json', 'utf8'))    
+    const config = JSON.parse(readFileSync('config.json', 'utf8'))
+    const token = readFileSync('bot-secret.txt', 'utf8')
 
     const isUserSubmission = (message : Message<boolean>) : boolean =>  {
         const attachmentName = message.attachments.at(0)?.attachment.toString()
@@ -108,8 +109,7 @@ export const runClient = ({onAcceptBeatmap, onPostSubmission, onRejectSubmission
         message.edit({embeds: embeds, components: components})
     }
     
-    client.on("interactionCreate", interaction => {
-        console.log("INTERACTION: ", interaction);
+    client.on("interactionCreate", async interaction => {
         if (!interaction.isButton()) return
         if (interaction.channelId !== config['mod-beatmap-verify-channel-id']) return
     
@@ -118,8 +118,8 @@ export const runClient = ({onAcceptBeatmap, onPostSubmission, onRejectSubmission
         const message = <Message<boolean>> interaction.message
 
         const downloadURL = message.embeds[0]?.url
-        const username = message.embeds[0]?.author.url
-        const userAvatar = message.embeds[0]?.thumbnail.url
+        const username = message.embeds[0]?.author?.name
+        const userAvatar = message.embeds[0]?.thumbnail?.url
 
         if (interaction.customId === 'accept') {
             accepted = true;
@@ -162,7 +162,12 @@ export const runClient = ({onAcceptBeatmap, onPostSubmission, onRejectSubmission
         }
     });
 
-    client.login(readFileSync('bot-secret.txt', 'utf8')).then(() => {
+    const hasRole = (member : GuildMember, roleId : string) => {
+        const roles = member.roles
+        return roles.cache.has(roleId)
+    }
+
+    client.login(token).then(() => {
         console.log("Client Logged in!");
         client.user?.setPresence({ activities: [{ name: config['bot-status'], url: config['bot-status-url'], type: config['bot-status-type'] }], status: 'online' });
         client.user?.setAvatar(config['bot-avatar'])

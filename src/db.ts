@@ -1,5 +1,6 @@
 import { Database } from 'sqlite3'
 import { existsSync, mkdirSync } from 'fs';
+import * as fs from 'fs'
 import { basename, dirname } from 'path'
 import JSONdb = require('simple-json-db')
 import download = require('download')
@@ -60,8 +61,9 @@ const parseZipEntry = (zip: any, entryPath : string, getBeatmap: (beatmap: IBeat
                     result += chunk
                 })
                 stm.on('end', () => {
-                    console.log("GOT BEATMAP: ", result)
-                    getBeatmap(parseBeatmapString(result))
+                    const newBeatmap = parseBeatmapString(result);
+                    console.log("GOT: ", newBeatmap)
+                    getBeatmap(newBeatmap)
                     resolve()
                 });
             })
@@ -79,6 +81,42 @@ export const deleteSubmission = (downloadURL: string) => {
     submissions.delete(downloadURL)
 }
 
+const registerZipPackage = async (zipFilePath : string) => {
+
+    const fileStats = await fs.promises.stat(zipFilePath)
+
+    const resultingPackage : IBeatmapPackage = {
+        filePath: zipFilePath.startsWith("db") ? zipFilePath.substr(3) : zipFilePath,
+        time: fileStats.birthtime,
+        beatmaps: []
+    }
+
+    const zip = await new StreamZip.async({ file: zipFilePath })
+    const entries = Object.values(await zip.entries())
+    for (const entry of entries) {
+        if (!entry.isDirectory) {
+            await parseZipEntry(zip, entry.name, beatmap => resultingPackage.beatmaps.push(beatmap))
+        }
+    }
+    // Close zip file reading
+    await zip.close();
+    // Update database
+    let currentPackages : IBeatmapPackage[] | undefined = <IBeatmapPackage[]>packages.get('packages')
+    packages.set('packages', !!currentPackages? [...currentPackages, resultingPackage ] : [resultingPackage])
+}
+
+// Will reload `packages.json` based on the beatmap files in `packages`
+export const refreshDatabase = async () => {
+    // Clear packages
+    packages.JSON({})
+    const files = await fs.promises.readdir('db/packages');
+    for (const file of files) {
+        const filename = 'db/packages/' + file
+        console.log("REFRESHING: ", filename)
+        await registerZipPackage(filename)
+    }
+}
+
 export const downloadBeatmapPackage = (url : string) : Promise<void> => {
     return new Promise<void>((resolve, reject) => {
         // 1) Download zip file to db/packages
@@ -94,28 +132,10 @@ export const downloadBeatmapPackage = (url : string) : Promise<void> => {
             } while (existsSync(checkname))
             filename = checkname
         }
-        const resultingPackage : IBeatmapPackage = {
-            filePath: filename.startsWith("db") ? filename.substr(3) : filename,
-            time: new Date(),
-            beatmaps: []
-        }
         download(url, dirname(filename), {filename: basename(filename)}).then(async () => {
             console.log("DOWNLOADED", filename)
-            const zip = await new StreamZip.async({ file: filename })
-            const entries = Object.values(await zip.entries())
-            for (let i = 0; i < entries.length; ++i) {
-                const entry = entries[i]
-                if (!entry.isDirectory) {
-                    await parseZipEntry(zip, entry.name, beatmap => resultingPackage.beatmaps.push(beatmap))
-                }
-            }
-            console.log("Finished going through entries")
-            // Close zip file reading
-            await zip.close();
-            // Update database
-            const currentPackages : IBeatmapPackage[] | undefined = <IBeatmapPackage[]>packages.get('packages')
-            if (!!currentPackages)
-                packages.set('packages', [...currentPackages, resultingPackage ])
+            // We have a new zip file, register it.
+            await registerZipPackage(filename)
             // Clear whatever submission we may have had before
             deleteSubmission(url)
             resolve()
