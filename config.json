@@ -1,0 +1,10 @@
+{
+    "bot-status": "Your epic beats",
+    "bot-status-type": "LISTENING",
+    "bot-status-url": "http://64.225.60.116:8080/",
+    "bot-avatar": "boticon.png",
+    "user-beatmap-submission-channel-id": "949052886611005481",
+    "mod-beatmap-verify-channel-id": "949053496823533658",
+    "bot-logs-channel-id": "949461666440040491",
+    "processing-reaction": "👀"
+}
