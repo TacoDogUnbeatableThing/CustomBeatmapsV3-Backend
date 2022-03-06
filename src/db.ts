@@ -88,7 +88,7 @@ const registerZipPackage = async (zipFilePath : string) => {
     const fileStats = await fs.promises.stat(zipFilePath)
 
     const resultingPackage : IBeatmapPackage = {
-        filePath: zipFilePath.startsWith("db") ? zipFilePath.substr(3) : zipFilePath,
+        filePath: zipFilePath.startsWith("db/public/") ? zipFilePath.substr(10) : zipFilePath,
         time: fileStats.birthtime,
         beatmaps: []
     }
