@@ -1,6 +1,6 @@
 import { runClient } from "./client";
 import { readFileSync } from "fs";
-import { downloadBeatmapPackage, registerSubmission, deleteSubmission, getUserInfo, registerNewUser } from "./db";
+import { downloadBeatmapPackage, registerSubmission, deleteSubmission, getUserInfo, registerNewUser, registerScoreUserId } from "./db";
 
 import { exec } from 'child_process'
 import { runUserServer } from "./user-server";
@@ -24,6 +24,7 @@ runClient({
     return runUserServer({
         getUserInfoFromUniqueId: getUserInfo,
         createNewUser: registerNewUser,
+        postHighScore : submission => registerScoreUserId(submission.serverPackageURL, submission.beatmapIndex, submission.uniqueUserId, {score: submission.score, accuracy: submission.accuracy, fc: submission.fc}),
         config: config
     })
 })

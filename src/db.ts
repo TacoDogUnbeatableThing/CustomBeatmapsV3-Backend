@@ -2,9 +2,12 @@ import { Database } from 'sqlite3'
 import { existsSync, mkdirSync } from 'fs';
 import * as fs from 'fs'
 import { basename, dirname } from 'path'
+import { get, set } from 'lodash'
+
 import JSONdb = require('simple-json-db')
 import download = require('download')
 import StreamZip = require('node-stream-zip')
+
 
 import { IBeatmapSubmission, IUserInfo } from './data'
 
@@ -21,6 +24,8 @@ if (!existsSync('db/private'))
 const packages = new JSONdb('./db/public/packages.json');
 const submissions = new JSONdb('./db/public/submissions.json');
 const users = new JSONdb('./db/private/users.json')
+const highscores = new JSONdb('./db/public/highscores.json')
+
 if (!packages.has('packages'))
     packages.set('packages', [])
 
@@ -35,7 +40,11 @@ interface IBeatmapPackage {
     time: Date,
     beatmaps: IBeatmap[]
 }
-
+interface IBeatmapHighScore {
+    score: number
+    accuracy: number
+    fc: boolean
+}
 
 const getBeatmapProp = (osu : string, label : string) => {
     const match = osu.match(`${label}: *(.+?)\r?\n`);
@@ -77,9 +86,11 @@ const parseZipEntry = (zip: any, entryPath : string, getBeatmap: (beatmap: IBeat
 
 // We also keep track of submissions so we can easily test them from the game.
 export const registerSubmission = (submission : IBeatmapSubmission) => {
+    console.log("NEW SUBMISSION: ", submission)
     submissions.set(submission.downloadURL, submission)
 }
 export const deleteSubmission = (downloadURL: string) => {
+    console.log("DELETE SUBMISSION: ", downloadURL)
     submissions.delete(downloadURL)
 }
 
@@ -109,12 +120,13 @@ const registerZipPackage = async (zipFilePath : string) => {
 
 // Will reload `packages.json` based on the beatmap files in `packages`
 export const refreshDatabase = async () => {
+    console.log("REFRESHING DATABASE")
     // Clear packages
     packages.JSON({})
     const files = await fs.promises.readdir('db/public/packages');
     for (const file of files) {
         const filename = 'db/public/packages/' + file
-        console.log("REFRESHING: ", filename)
+        console.log("   ", filename)
         await registerZipPackage(filename)
     }
 }
@@ -123,7 +135,7 @@ export const downloadBeatmapPackage = (url : string) : Promise<void> => {
     return new Promise<void>((resolve, reject) => {
         // 1) Download zip file to db/packages
         let filename = 'db/public/packages/' + basename(new URL(url).pathname)
-        console.log("FILENAME: ", filename)
+        console.log("DOWNLOADING PACKAGE: ", url, " => ", filename)
         // Make unique in the event that there are duplicates
         if (existsSync(filename)) {
             let ver = 1 // start at ver2
@@ -135,7 +147,7 @@ export const downloadBeatmapPackage = (url : string) : Promise<void> => {
             filename = checkname
         }
         download(url, dirname(filename), {filename: basename(filename)}).then(async () => {
-            console.log("DOWNLOADED", filename)
+            console.log("        downloaded: ", filename)
             // We have a new zip file, register it.
             await registerZipPackage(filename)
             // Clear whatever submission we may have had before
@@ -177,6 +189,7 @@ export const registerNewUser = (username : string) : Promise<string> => {
 
         const newUniqueId = generateUniqueUserId(username)
         const newUserData : IUserInfo = {name: username}
+        console.log("NEW USER: ", username, " => ", newUserData)
         users.set(newUniqueId, newUserData)
         resolve(newUniqueId)
     })
@@ -191,4 +204,47 @@ export const getUserInfo = (uniqueUserId : string) : Promise<IUserInfo> => {
             reject("No user with given id found.")
         }
     })
+}
+
+// Manually set our high score
+const setScore = (packageFilePath: string, beatmapIndex : number, username : string, score : IBeatmapHighScore) : Promise<void> => {
+    return new Promise((resolve, reject) => {
+        const toSet : any = highscores.get(packageFilePath) ?? {}
+        set(toSet, [beatmapIndex.toString(), username], score)
+        highscores.set(packageFilePath, toSet)
+        resolve()
+    })
+}
+
+const registerScoreUsername = (packageFilePath: string, beatmapIndex : number, username : string, score : IBeatmapHighScore) : Promise<boolean> => {
+    return new Promise((resolve, reject) => {
+        console.log(`SCORE for ${username} on ${packageFilePath}[${beatmapIndex}]:`, score)
+        const prevRecord : IBeatmapHighScore = get(highscores.get(packageFilePath), [beatmapIndex.toString(), username])
+        console.log("    (prev record: ", prevRecord, ")")
+        if (!!prevRecord && !!prevRecord.score) {
+            // Check for high score
+            // might abstract this one out to a comparison or something...
+            if (score.score > prevRecord.score) {
+                return setScore(packageFilePath, beatmapIndex, username, score).then(() => resolve(true))
+            } else {
+                resolve(false)
+            }
+        } else {
+            console.log("    new: ", score.score)
+            return setScore(packageFilePath, beatmapIndex, username, score).then(() => resolve(true))
+        }
+    })
+}
+
+/**
+ * Registers a user score
+ * 
+ * @param packageFilePath The package filepath (ex. packages/...zip)
+ * @param beatmapIndex The integer index within the package of WHICH beatmap was played
+ * @param uniqueUserId The unique/private id of a user
+ * @param score
+ * @returns A Promise of whether or not the user got a new high score
+ */
+export const registerScoreUserId = (packageFilePath: string, beatmapIndex : number, uniqueUserId : string, score : IBeatmapHighScore) : Promise<boolean> => {
+    return getUserInfo(uniqueUserId).then(userInfo => registerScoreUsername(packageFilePath, beatmapIndex, userInfo.name, score))
 }
