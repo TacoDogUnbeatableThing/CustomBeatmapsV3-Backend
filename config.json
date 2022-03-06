@@ -9,5 +9,7 @@
     "user-beatmap-submission-channel-id": "949052886611005481",
     "mod-beatmap-verify-channel-id": "949053496823533658",
     "bot-logs-channel-id": "949461666440040491",
-    "processing-reaction": "👀"
+    "processing-reaction": "👀",
+    "public-data-server-port": 8080,
+    "user-server-port": 8081
 }

@@ -1,1 +1,5 @@
-boticon.png was made by D-Cell Games and is ripped from UNBEATABLE: White Label
+boticon.png:
+    made by D-Cell Games and is ripped from UNBEATABLE: White Label
+
+cyrb53 hash function:
+    https://stackoverflow.com/questions/7616461/generate-a-hash-from-string-in-javascript

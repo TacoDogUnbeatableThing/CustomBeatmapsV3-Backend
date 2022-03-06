@@ -3,18 +3,18 @@ import { readFileSync } from "fs";
 
 import { IBeatmapSubmission } from './data'
 
-interface IRunClientArgs {
+interface IRunClientArguments {
     onAcceptBeatmap : (beatmapURL : string, onComplete : () => void) => void;
     onPostSubmission : (submission : IBeatmapSubmission) => void;
     onRejectSubmission : (downloadURL : string) => void;
+    config : any
 }
-export const runClient = ({onAcceptBeatmap, onPostSubmission, onRejectSubmission} : IRunClientArgs) => {
+export const runClient = ({onAcceptBeatmap, onPostSubmission, onRejectSubmission, config} : IRunClientArguments) : Promise<void> => {
 
     const client = new Client({
         intents: [Intents.FLAGS.GUILDS, Intents.FLAGS.GUILD_MESSAGES, Intents.FLAGS.GUILD_MESSAGE_REACTIONS]
     })
 
-    const config = JSON.parse(readFileSync('config.json', 'utf8'))
     const token = readFileSync('bot-secret.txt', 'utf8')
 
     const isUserSubmission = (message : Message<boolean>) : boolean =>  {
@@ -167,9 +167,13 @@ export const runClient = ({onAcceptBeatmap, onPostSubmission, onRejectSubmission
         return roles.cache.has(roleId)
     }
 
-    client.login(token).then(() => {
-        console.log("Client Logged in!");
+    return client.login(token).then(() => {
+        console.log("Discord Client Logged in!");
         client.user?.setPresence({ activities: [{ name: config['bot-status'], url: config['bot-status-url'], type: config['bot-status-type'] }], status: 'online' });
-        client.user?.setAvatar(config['bot-avatar'])
+        try {
+            client.user?.setAvatar(config['bot-avatar'])
+        } catch (_) {
+            // Ignore, we're fine.
+        }
     })
 }

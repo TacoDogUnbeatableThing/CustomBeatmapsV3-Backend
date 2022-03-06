@@ -4,3 +4,7 @@ export interface IBeatmapSubmission {
     avatarURL: string,
     downloadURL: string
 }
+
+export interface IUserInfo {
+    name : string
+}
