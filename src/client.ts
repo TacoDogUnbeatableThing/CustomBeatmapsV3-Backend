@@ -57,7 +57,6 @@ export const runClient = ({onAcceptBeatmap, onPostSubmission, onRejectSubmission
     
     const receiveUserSubmission = (message : Message<boolean>) => {
         // Indicate we've received their submission
-        message.react(config["processing-reaction"])
         // Post a simple poll to the "verification" area
         const channel = client.channels.cache.get(config["mod-beatmap-verify-channel-id"]) as TextChannel
         const pollPrompt = `${config["approve-reaction"]} to accept and upload, ${config["reject-reaction"]} to reject (DM creator with reason)`
@@ -78,15 +77,18 @@ export const runClient = ({onAcceptBeatmap, onPostSubmission, onRejectSubmission
                 .addComponents(
                     getDefaultMessageButtons()
                 )
-        if (!!attachmentURL) {
-            onPostSubmission({
-                username: message.author.username,
-                avatarURL: !!avatarURL? avatarURL : "",
-                downloadURL: attachmentURL
-            })
-        }
     
-        channel.send({ embeds: [embed], components: [buttons] });
+        // Make sure our verifiers get an update first before confirming!
+        channel.send({ embeds: [embed], components: [buttons] }).then(() => {
+            message.react(config["processing-reaction"])
+            if (!!attachmentURL) {
+                onPostSubmission({
+                    username: message.author.username,
+                    avatarURL: !!avatarURL? avatarURL : "",
+                    downloadURL: attachmentURL
+                })
+            }
+        });
     }
     
     client.on("messageCreate", message => {
@@ -173,6 +175,7 @@ export const runClient = ({onAcceptBeatmap, onPostSubmission, onRejectSubmission
         try {
             client.user?.setAvatar(config['bot-avatar'])
         } catch (_) {
+            console.log("(Failed to set avatar, we'll keep going)")
             // Ignore, we're fine.
         }
     })

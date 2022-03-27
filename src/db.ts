@@ -1,7 +1,7 @@
 import { Database } from 'sqlite3'
 import { existsSync, mkdirSync } from 'fs';
 import * as fs from 'fs'
-import { basename, dirname } from 'path'
+import { basename, dirname, relative } from 'path'
 import { get, set } from 'lodash'
 
 import JSONdb = require('simple-json-db')
@@ -25,6 +25,7 @@ const packages = new JSONdb('./db/public/packages.json');
 const submissions = new JSONdb('./db/public/submissions.json');
 const users = new JSONdb('./db/private/users.json')
 const highscores = new JSONdb('./db/public/highscores.json')
+const lowscores = new JSONdb('./db/public/lowscores.json')
 
 if (!packages.has('packages'))
     packages.set('packages', [])
@@ -33,17 +34,18 @@ interface IBeatmap {
     name : string,
     artist : string,
     creator: string,
-    difficulty: string
+    difficulty: string,
+    audioFileName: string
 }
 interface IBeatmapPackage {
     filePath: string,
     time: Date,
-    beatmaps: IBeatmap[]
+    beatmaps: {[bmapFilePath: string] : IBeatmap}
 }
 interface IBeatmapHighScore {
     score: number
     accuracy: number
-    fc: boolean
+    fc: number
 }
 
 const getBeatmapProp = (osu : string, label : string) => {
@@ -54,11 +56,16 @@ const getBeatmapProp = (osu : string, label : string) => {
 }
 
 const parseBeatmapString = (osu : string) : IBeatmap => {
+    let audioFilename = getBeatmapProp(osu, "AudioFilename")
+    if (audioFilename.startsWith("USER_BEATMAPS/")) {
+        audioFilename = audioFilename.substring("USER_BEATMAPS/".length)
+    }
     return {
         name: getBeatmapProp(osu, "TitleUnicode"),
         artist: getBeatmapProp(osu, "Artist"),
         creator: getBeatmapProp(osu, "Creator"),
-        difficulty: getBeatmapProp(osu, "Version")
+        difficulty: getBeatmapProp(osu, "Version"),
+        audioFileName: audioFilename
     }
 }
 
@@ -101,14 +108,14 @@ const registerZipPackage = async (zipFilePath : string) => {
     const resultingPackage : IBeatmapPackage = {
         filePath: zipFilePath.startsWith("db/public/") ? zipFilePath.substr(10) : zipFilePath,
         time: fileStats.birthtime,
-        beatmaps: []
+        beatmaps: {}
     }
 
     const zip = await new StreamZip.async({ file: zipFilePath })
     const entries = Object.values(await zip.entries())
     for (const entry of entries) {
         if (!entry.isDirectory) {
-            await parseZipEntry(zip, entry.name, beatmap => resultingPackage.beatmaps.push(beatmap))
+            await parseZipEntry(zip, entry.name, beatmap => resultingPackage.beatmaps[entry.name] = beatmap)
         }
     }
     // Close zip file reading
@@ -182,13 +189,13 @@ export const registerNewUser = (username : string) : Promise<string> => {
     return new Promise((resolve, reject) => {
 
         // Usernames must be unique
-        if (!!Object.values(users.JSON).find(userData => userData.name.toLowerCase() === username.toLowerCase())) {
+        if (!!Object.values(users.JSON()).find((userData : any) => userData["name"].toLowerCase() === username.toLowerCase())) {
             reject("Username already taken!");
             return;
         }
 
         const newUniqueId = generateUniqueUserId(username)
-        const newUserData : IUserInfo = {name: username}
+        const newUserData : IUserInfo = {name: username, registered: new Date()}
         console.log("NEW USER: ", username, " => ", newUserData)
         users.set(newUniqueId, newUserData)
         resolve(newUniqueId)
@@ -207,33 +214,35 @@ export const getUserInfo = (uniqueUserId : string) : Promise<IUserInfo> => {
 }
 
 // Manually set our high score
-const setScore = (packageFilePath: string, beatmapIndex : number, username : string, score : IBeatmapHighScore) : Promise<void> => {
+const setScore = (db : any, beatmapKey: string, username : string, score : IBeatmapHighScore) : Promise<void> => {
     return new Promise((resolve, reject) => {
-        const toSet : any = highscores.get(packageFilePath) ?? {}
-        set(toSet, [beatmapIndex.toString(), username], score)
-        highscores.set(packageFilePath, toSet)
+        const toSet : any = db.get(beatmapKey) ?? {}
+        set(toSet, username, score)
+        db.set(beatmapKey, toSet)
         resolve()
     })
 }
 
-const registerScoreUsername = (packageFilePath: string, beatmapIndex : number, username : string, score : IBeatmapHighScore) : Promise<boolean> => {
+const tryRegisterScore = (db: any, beatmapKey : string, username : string, score : IBeatmapHighScore, accept : (score : IBeatmapHighScore, prevRecord : IBeatmapHighScore) => boolean) : Promise<void> => {
     return new Promise((resolve, reject) => {
-        console.log(`SCORE for ${username} on ${packageFilePath}[${beatmapIndex}]:`, score)
-        const prevRecord : IBeatmapHighScore = get(highscores.get(packageFilePath), [beatmapIndex.toString(), username])
-        console.log("    (prev record: ", prevRecord, ")")
+        const prevRecord : IBeatmapHighScore = get(db.get(beatmapKey), username)
+        console.log("        (prev record: ", prevRecord, ")")
         if (!!prevRecord && !!prevRecord.score) {
-            // Check for high score
-            // might abstract this one out to a comparison or something...
-            if (score.score > prevRecord.score) {
-                return setScore(packageFilePath, beatmapIndex, username, score).then(() => resolve(true))
+            if (accept(score, prevRecord)) {
+                return setScore(db, beatmapKey, username, score).then(() => resolve())
             } else {
-                resolve(false)
+                resolve()
             }
         } else {
-            console.log("    new: ", score.score)
-            return setScore(packageFilePath, beatmapIndex, username, score).then(() => resolve(true))
+            console.log("        new: ", score.score)
+            return setScore(db, beatmapKey, username, score).then(() => resolve())
         }
-    })
+    });
+}
+
+const registerScoreUsername = (beatmapKey : string, username : string, score : IBeatmapHighScore) : Promise<void> => {
+    return tryRegisterScore(highscores, beatmapKey, username, score, (score, record) => record.score > score.score)
+    .then(() => tryRegisterScore(lowscores, beatmapKey, username, score, (score, record) => record.score < score.score))
 }
 
 /**
@@ -245,6 +254,7 @@ const registerScoreUsername = (packageFilePath: string, beatmapIndex : number, u
  * @param score
  * @returns A Promise of whether or not the user got a new high score
  */
-export const registerScoreUserId = (packageFilePath: string, beatmapIndex : number, uniqueUserId : string, score : IBeatmapHighScore) : Promise<boolean> => {
-    return getUserInfo(uniqueUserId).then(userInfo => registerScoreUsername(packageFilePath, beatmapIndex, userInfo.name, score))
+export const registerScoreUserId = (beatmapKey : string, uniqueUserId : string, score : IBeatmapHighScore) : Promise<void> => {
+    beatmapKey = beatmapKey.replaceAll("\\", "/")
+    return getUserInfo(uniqueUserId).then(userInfo => registerScoreUsername(beatmapKey, userInfo.name, score))
 }

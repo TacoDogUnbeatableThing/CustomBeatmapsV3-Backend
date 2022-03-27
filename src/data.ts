@@ -6,5 +6,6 @@ export interface IBeatmapSubmission {
 }
 
 export interface IUserInfo {
-    name : string
+    name : string,
+    registered: Date
 }

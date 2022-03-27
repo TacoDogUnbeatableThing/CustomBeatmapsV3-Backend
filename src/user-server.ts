@@ -5,11 +5,10 @@ import { IUserInfo } from './data'
 
 export interface IScoreSubmission {
     uniqueUserId : string
-    serverPackageURL : string
-    beatmapIndex : number
+    beatmapKey : string
     score : number
     accuracy : number
-    fc : boolean
+    fc : number
 }
 
 const checkInvalidKeys = (obj : any, keysToCheck : string[], onFail : (keys : string[]) => void) : boolean => {
@@ -24,7 +23,7 @@ const checkInvalidKeys = (obj : any, keysToCheck : string[], onFail : (keys : st
 interface IRunServerArguments {
     getUserInfoFromUniqueId : (userUniqueId : string) => Promise<IUserInfo>,
     createNewUser : (username : string) => Promise<string>,
-    postHighScore : (scoreSubmission : IScoreSubmission) => Promise<boolean>,
+    postHighScore : (scoreSubmission : IScoreSubmission) => Promise<void>,
     config: any
 }
 export const runUserServer = ({getUserInfoFromUniqueId, createNewUser, postHighScore, config} : IRunServerArguments) : Promise<void> => {
@@ -32,10 +31,18 @@ export const runUserServer = ({getUserInfoFromUniqueId, createNewUser, postHighS
 
     app.use(express.json())
 
+    // A simple "ping" screen
+    app.get('/', (req, res) => res.send("OK"))
+
     // Route that receives a POST request to /sms
     app.post('/user', (req, res) => {
         const body = req.body
         const id = body['id']
+        if (!id) {
+            res.set('Content-Type', 'text/plain')
+            res.send("Must provide JSON with 'id' key")
+            return
+        }
         getUserInfoFromUniqueId(id).then(userInfo => {
             res.set('Content-Type', 'application/json')
             res.send(userInfo)
@@ -74,14 +81,15 @@ export const runUserServer = ({getUserInfoFromUniqueId, createNewUser, postHighS
         const body = req.body
         const score : IScoreSubmission = body
 
-        if (!checkInvalidKeys(score, ['uniqueUserId', 'serverPackageURL', 'beatmapIndex', 'score', 'accuracy', 'fc'], missedKeys => {
+        if (!checkInvalidKeys(score, ['uniqueUserId', 'beatmapKey', 'score', 'accuracy', 'fc'], missedKeys => {
             res.set('Content-Type', 'text/plain')
             res.send(`Missing/Invalid key values for score: ${missedKeys.join(',')}`)
         })) {
-            postHighScore(score).then(newHighScore => {
+            console.log("GOT SCORE: ", score)
+            postHighScore(score).then(() => {
                 res.set('Content-Type', 'application/json')
                 res.send({
-                    'highscore': newHighScore
+                    'highscore': false
                 })
             }).catch(err => {
                 res.set('Content-Type', 'text/plain')
