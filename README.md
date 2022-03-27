@@ -24,9 +24,11 @@ To access currently processing submissions,go to `localhost:8080/submissions.jso
 var downloads = document.getElementsByClassName('anchor-1MIwyf anchorUnderlineOnHover-2qPutX downloadWrapper-1Cy2Fi')
 var result = ""
 for (let i = 0; i < downloads.length; ++i) {
-    result += downloads[i].href + "\n"
+    var d = downloads[i]
+    var t = d.parentNode.parentNode.parentNode.parentNode.getElementsByTagName('time')[0].dateTime
+    result += d.href + "," + t + "\n"
 }
-let blob = new Blob([result], {type: 'text/plain'});
+var blob = new Blob([result], {type: 'text/plain'});
 URL.createObjectURL(blob)
 ```
 3) Open the link generated in the console and copy the resulting contents into `legacy-archive.txt`
