@@ -101,13 +101,13 @@ export const deleteSubmission = (downloadURL: string) => {
     submissions.delete(downloadURL)
 }
 
-const registerZipPackage = async (zipFilePath : string) => {
+const registerZipPackage = async (zipFilePath : string, time : Date | undefined = undefined) => {
 
     const fileStats = await fs.promises.stat(zipFilePath)
 
     const resultingPackage : IBeatmapPackage = {
         filePath: zipFilePath.startsWith("db/public/") ? zipFilePath.substr(10) : zipFilePath,
-        time: fileStats.birthtime,
+        time: !!time? time : fileStats.birthtime,
         beatmaps: {}
     }
 
@@ -128,17 +128,58 @@ const registerZipPackage = async (zipFilePath : string) => {
 // Will reload `packages.json` based on the beatmap files in `packages`
 export const refreshDatabase = async () => {
     console.log("REFRESHING DATABASE")
+    // Preserve dates
+    const dates : any = {}
+    const pkgs : any = packages.get("packages")
+    for (const pkg of pkgs) {
+        dates[pkg.filePath] = pkg.time
+    }
     // Clear packages
     packages.JSON({})
     const files = await fs.promises.readdir('db/public/packages');
     for (const file of files) {
         const filename = 'db/public/packages/' + file
         console.log("   ", filename)
-        await registerZipPackage(filename)
+        // Try to preserve dates
+        const date = dates['packages/' + file]
+        await registerZipPackage(filename, date)
     }
 }
 
-export const downloadBeatmapPackage = (url : string) : Promise<void> => {
+// TODO: Big code duplication for these two
+
+export const changeDate = (url : string, time : Date) => {
+    const filePathKey = "packages/" + basename(new URL(url).pathname)
+    const pkgs : any | undefined = packages.get("packages")
+    if (!pkgs)
+        return
+    for (let i = 0; i < pkgs.length; ++i) {
+        const pkg : any = pkgs[i]
+        if (pkg.filePath === filePathKey) {
+            console.log("Updated date for", filePathKey, ":", time)
+            pkgs[i] = {
+                ...pkg,
+                time: time
+            }
+        }
+    }
+    packages.set("packages", pkgs)
+}
+
+export const packageDownloaded = (url : string) : boolean => {
+    const filePathKey = "packages/" + basename(new URL(url).pathname)
+    const pkgs : any | undefined = packages.get("packages")
+    if (!pkgs)
+        return false
+    for (const pkg of pkgs) {
+        if (pkg.filePath === filePathKey) {
+            return true
+        }
+    }
+    return false
+}
+
+export const downloadBeatmapPackage = (url : string, time : Date | undefined = undefined) : Promise<void> => {
     return new Promise<void>((resolve, reject) => {
         // 1) Download zip file to db/packages
         let filename = 'db/public/packages/' + basename(new URL(url).pathname)
@@ -156,7 +197,7 @@ export const downloadBeatmapPackage = (url : string) : Promise<void> => {
         download(url, dirname(filename), {filename: basename(filename)}).then(async () => {
             console.log("        downloaded: ", filename)
             // We have a new zip file, register it.
-            await registerZipPackage(filename)
+            await registerZipPackage(filename, time)
             // Clear whatever submission we may have had before
             deleteSubmission(url)
             resolve()
@@ -241,8 +282,8 @@ const tryRegisterScore = (db: any, beatmapKey : string, username : string, score
 }
 
 const registerScoreUsername = (beatmapKey : string, username : string, score : IBeatmapHighScore) : Promise<void> => {
-    return tryRegisterScore(highscores, beatmapKey, username, score, (score, record) => record.score > score.score)
-    .then(() => tryRegisterScore(lowscores, beatmapKey, username, score, (score, record) => record.score < score.score))
+    return tryRegisterScore(highscores, beatmapKey, username, score, (score, record) => score.score > record.score)
+    .then(() => tryRegisterScore(lowscores, beatmapKey, username, score, (score, record) => score.score < record.score))
 }
 
 /**

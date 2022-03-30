@@ -84,18 +84,23 @@ export const runUserServer = ({getUserInfoFromUniqueId, createNewUser, postHighS
         if (!checkInvalidKeys(score, ['uniqueUserId', 'beatmapKey', 'score', 'accuracy', 'fc'], missedKeys => {
             res.set('Content-Type', 'text/plain')
             res.send(`Missing/Invalid key values for score: ${missedKeys.join(',')}`)
-        })) {
-            console.log("GOT SCORE: ", score)
-            postHighScore(score).then(() => {
-                res.set('Content-Type', 'application/json')
-                res.send({
-                    'highscore': false
-                })
-            }).catch(err => {
-                res.set('Content-Type', 'text/plain')
-                res.send(err)
-            })
+            return;
+        }))
+        if (score['beatmapKey'] == null) {
+            res.set('Content-Type', 'text/plain')
+            res.send(`No beatmap key provided!`)
+            return;
         }
+        console.log("GOT SCORE: ", score)
+        postHighScore(score).then(() => {
+            res.set('Content-Type', 'application/json')
+            res.send({
+                'highscore': false
+            })
+        }).catch(err => {
+            res.set('Content-Type', 'text/plain')
+            res.send(err)
+        })
     })
 
     const port = config["user-server-port"]
