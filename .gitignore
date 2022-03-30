@@ -3,3 +3,4 @@ dist
 beatmaps
 db
 bot-secret.txt
+*.log
