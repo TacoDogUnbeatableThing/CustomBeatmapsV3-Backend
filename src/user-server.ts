@@ -1,6 +1,5 @@
 import express from 'express'
-import { keys, isNil } from 'lodash'
-
+import Filter from 'bad-words'
 import { IUserInfo } from './data'
 
 export interface IScoreSubmission {
@@ -11,6 +10,8 @@ export interface IScoreSubmission {
     fc : number
 }
 
+const badWordFilter = new Filter()
+
 const checkInvalidKeys = (obj : any, keysToCheck : string[], onFail : (keys : string[]) => void) : boolean => {
     keysToCheck = keysToCheck.filter(key => !(key in obj))
     if (keysToCheck.length != 0) {
@@ -18,6 +19,11 @@ const checkInvalidKeys = (obj : any, keysToCheck : string[], onFail : (keys : st
         return true;
     }
     return false;
+}
+
+const returnError = (res: any, msg : string) => {
+    res.set('Content-Type', 'text/plain')
+    res.send(msg)
 }
 
 interface IRunServerArguments {
@@ -39,16 +45,14 @@ export const runUserServer = ({getUserInfoFromUniqueId, createNewUser, postHighS
         const body = req.body
         const id = body['id']
         if (!id) {
-            res.set('Content-Type', 'text/plain')
-            res.send("Must provide JSON with 'id' key")
+            returnError(res, "Must provide JSON with 'id' key")
             return
         }
         getUserInfoFromUniqueId(id).then(userInfo => {
             res.set('Content-Type', 'application/json')
             res.send(userInfo)
         }).catch(err => {
-            res.set('Content-Type', 'text/plain')
-            res.send(err)
+            returnError(res, err)
         })
     })
 
@@ -56,14 +60,16 @@ export const runUserServer = ({getUserInfoFromUniqueId, createNewUser, postHighS
         const body = req.body
         const username = body['username']
         if (!username) {
-            res.set('Content-Type', 'text/plain')
-            res.send("Must provide JSON with 'username' key")
+            returnError(res, "Must provide JSON with 'username' key")
+            return
+        }
+        if (badWordFilter.isProfane(username)) {
+            returnError(res, "Username is detected as profane")
             return
         }
         const usernameType = typeof username
         if (usernameType !== "string" ) {
-            res.set('Content-Type', 'text/plain')
-            res.send(`Invalid type for 'username': ${usernameType}`)
+            returnError(res, `Invalid type for 'username': ${usernameType}`)
             return
         }
         createNewUser(username).then(uniqueId => {
@@ -72,8 +78,7 @@ export const runUserServer = ({getUserInfoFromUniqueId, createNewUser, postHighS
                 'id': uniqueId
             })
         }).catch(err => {
-            res.set('Content-Type', 'text/plain')
-            res.send(err)
+            returnError(res, err)
         })
     })
 
@@ -82,13 +87,11 @@ export const runUserServer = ({getUserInfoFromUniqueId, createNewUser, postHighS
         const score : IScoreSubmission = body
 
         if (!checkInvalidKeys(score, ['uniqueUserId', 'beatmapKey', 'score', 'accuracy', 'fc'], missedKeys => {
-            res.set('Content-Type', 'text/plain')
-            res.send(`Missing/Invalid key values for score: ${missedKeys.join(',')}`)
+            returnError(res, `Missing/Invalid key values for score: ${missedKeys.join(',')}`)
             return;
         }))
         if (score['beatmapKey'] == null) {
-            res.set('Content-Type', 'text/plain')
-            res.send(`No beatmap key provided!`)
+            returnError(res, `No beatmap key provided!`)
             return;
         }
         console.log("GOT SCORE: ", score)
@@ -98,8 +101,7 @@ export const runUserServer = ({getUserInfoFromUniqueId, createNewUser, postHighS
                 'highscore': false
             })
         }).catch(err => {
-            res.set('Content-Type', 'text/plain')
-            res.send(err)
+            returnError(res, err)
         })
     })
 
