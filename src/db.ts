@@ -8,6 +8,8 @@ import JSONdb = require('simple-json-db')
 import download = require('download')
 import StreamZip = require('node-stream-zip')
 
+import { logger } from './publiclogger'
+
 
 import { IBeatmapSubmission, IUserInfo } from './data'
 
@@ -73,14 +75,14 @@ const parseZipEntry = (zip: any, entryPath : string, getBeatmap: (beatmap: IBeat
     return new Promise<void>(resolve => {
         if (entryPath.endsWith('.osu')) {
             zip.stream(entryPath).then((stm : any) => {
-                console.log("STREAMING", entryPath)
+                logger.info("STREAMING", entryPath)
                 let result = ''
                 stm.on('data', (chunk : string) => {
                     result += chunk
                 })
                 stm.on('end', () => {
                     const newBeatmap = parseBeatmapString(result);
-                    console.log("GOT: ", newBeatmap)
+                    logger.info("GOT: ", newBeatmap)
                     getBeatmap(newBeatmap)
                     resolve()
                 });
@@ -93,11 +95,11 @@ const parseZipEntry = (zip: any, entryPath : string, getBeatmap: (beatmap: IBeat
 
 // We also keep track of submissions so we can easily test them from the game.
 export const registerSubmission = (submission : IBeatmapSubmission) => {
-    console.log("NEW SUBMISSION: ", submission)
+    logger.info("NEW SUBMISSION: ", submission)
     submissions.set(submission.downloadURL, submission)
 }
 export const deleteSubmission = (downloadURL: string) => {
-    console.log("DELETE SUBMISSION: ", downloadURL)
+    logger.info("DELETE SUBMISSION: ", downloadURL)
     submissions.delete(downloadURL)
 }
 
@@ -127,7 +129,7 @@ const registerZipPackage = async (zipFilePath : string, time : Date | undefined 
 
 // Will reload `packages.json` based on the beatmap files in `packages`
 export const refreshDatabase = async () => {
-    console.log("REFRESHING DATABASE")
+    logger.info("REFRESHING DATABASE")
     // Preserve dates
     const dates : any = {}
     const pkgs : any = packages.get("packages")
@@ -139,7 +141,7 @@ export const refreshDatabase = async () => {
     const files = await fs.promises.readdir('db/public/packages');
     for (const file of files) {
         const filename = 'db/public/packages/' + file
-        console.log("   ", filename)
+        logger.info("   ", filename)
         // Try to preserve dates
         const date = dates['packages/' + file]
         await registerZipPackage(filename, date)
@@ -156,7 +158,7 @@ export const changeDate = (url : string, time : Date) => {
     for (let i = 0; i < pkgs.length; ++i) {
         const pkg : any = pkgs[i]
         if (pkg.filePath === filePathKey) {
-            console.log("Updated date for", filePathKey, ":", time)
+            logger.info("Updated date for", filePathKey, ":", time)
             pkgs[i] = {
                 ...pkg,
                 time: time
@@ -183,7 +185,7 @@ export const downloadBeatmapPackage = (url : string, time : Date | undefined = u
     return new Promise<void>((resolve, reject) => {
         // 1) Download zip file to db/packages
         let filename = 'db/public/packages/' + basename(new URL(url).pathname)
-        console.log("DOWNLOADING PACKAGE: ", url, " => ", filename)
+        logger.info("DOWNLOADING PACKAGE: ", url, " => ", filename)
         // Make unique in the event that there are duplicates
         if (existsSync(filename)) {
             let ver = 1 // start at ver2
@@ -195,7 +197,7 @@ export const downloadBeatmapPackage = (url : string, time : Date | undefined = u
             filename = checkname
         }
         download(url, dirname(filename), {filename: basename(filename)}).then(async () => {
-            console.log("        downloaded: ", filename)
+            logger.info("        downloaded: ", filename)
             // We have a new zip file, register it.
             await registerZipPackage(filename, time)
             // Clear whatever submission we may have had before
@@ -237,6 +239,8 @@ export const registerNewUser = (username : string) : Promise<string> => {
 
         const newUniqueId = generateUniqueUserId(username)
         const newUserData : IUserInfo = {name: username, registered: new Date()}
+        // private pls
+        logger.info("NEW USER:", username)
         console.log("NEW USER: ", username, " => ", newUserData)
         users.set(newUniqueId, newUserData)
         resolve(newUniqueId)
@@ -267,7 +271,7 @@ const setScore = (db : any, beatmapKey: string, username : string, score : IBeat
 const tryRegisterScore = (db: any, beatmapKey : string, username : string, score : IBeatmapHighScore, accept : (score : IBeatmapHighScore, prevRecord : IBeatmapHighScore) => boolean) : Promise<void> => {
     return new Promise((resolve, reject) => {
         const prevRecord : IBeatmapHighScore = get(db.get(beatmapKey), username)
-        console.log("        (prev record: ", prevRecord, ")")
+        logger.info("        (prev record: ", prevRecord, ")")
         if (!!prevRecord && !!prevRecord.score) {
             if (accept(score, prevRecord)) {
                 return setScore(db, beatmapKey, username, score).then(() => resolve())
@@ -275,13 +279,14 @@ const tryRegisterScore = (db: any, beatmapKey : string, username : string, score
                 resolve()
             }
         } else {
-            console.log("        new: ", score.score)
+            logger.info("        new: ", score.score)
             return setScore(db, beatmapKey, username, score).then(() => resolve())
         }
     });
 }
 
 const registerScoreUsername = (beatmapKey : string, username : string, score : IBeatmapHighScore) : Promise<void> => {
+    logger.info("GOT SCORE:", username, beatmapKey, score)
     return tryRegisterScore(highscores, beatmapKey, username, score, (score, record) => score.score > record.score)
     .then(() => tryRegisterScore(lowscores, beatmapKey, username, score, (score, record) => score.score < record.score))
 }

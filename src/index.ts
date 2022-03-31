@@ -1,22 +1,23 @@
 import { runClient } from "./client";
 import { readFileSync } from "fs";
-import { downloadBeatmapPackage, registerSubmission, deleteSubmission, getUserInfo, registerNewUser, registerScoreUserId } from "./db";
-
 import { exec } from 'child_process'
+
+import { downloadBeatmapPackage, registerSubmission, deleteSubmission, getUserInfo, registerNewUser, registerScoreUserId } from "./db";
 import { runUserServer } from "./user-server";
+import { logger } from './publiclogger'
 
 const config = JSON.parse(readFileSync('config.json', 'utf8'))
 
 // File Server for db/public
-console.log(`Hosting db/public on port ${config["public-data-server-port"]}`)
+logger.info(`Hosting db/public on port ${config["public-data-server-port"]}`)
 exec(`http-server db/public --port ${config["public-data-server-port"]}`, (error, stdout, stderr) => {
-    console.info("(HTTP server response)")
+    logger.info("(HTTP server response)")
     if (!!stdout)
-        console.log(stdout)
+        logger.info(stdout)
     if (!!error)
-        console.error(error)
+        logger.error(error)
     if (!!stderr)
-        console.error(stderr)
+        logger.error(stderr)
 });
 
 // Discord client

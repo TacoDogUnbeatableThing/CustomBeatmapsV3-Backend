@@ -2,6 +2,8 @@ import express from 'express'
 import Filter from 'bad-words'
 import { IUserInfo } from './data'
 
+import { logger } from './publiclogger'
+
 export interface IScoreSubmission {
     uniqueUserId : string
     beatmapKey : string
@@ -94,7 +96,6 @@ export const runUserServer = ({getUserInfoFromUniqueId, createNewUser, postHighS
             returnError(res, `No beatmap key provided!`)
             return;
         }
-        console.log("GOT SCORE: ", score)
         postHighScore(score).then(() => {
             res.set('Content-Type', 'application/json')
             res.send({
@@ -109,7 +110,7 @@ export const runUserServer = ({getUserInfoFromUniqueId, createNewUser, postHighS
 
     return new Promise(resolve => {
         app.listen(port, () => {
-            console.log(`User Server started on port ${port}`)
+            logger.info(`User Server started on port ${port}`)
             resolve()
         })
     })

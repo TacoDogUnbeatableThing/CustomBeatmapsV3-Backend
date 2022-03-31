@@ -3,6 +3,8 @@ import { readFileSync } from "fs";
 
 import { IBeatmapSubmission } from './data'
 
+import { logger } from './publiclogger'
+
 interface IRunClientArguments {
     onAcceptBeatmap : (beatmapURL : string, onComplete : () => void) => void;
     onPostSubmission : (submission : IBeatmapSubmission) => void;
@@ -150,7 +152,7 @@ export const runClient = ({onAcceptBeatmap, onPostSubmission, onRejectSubmission
             }
             interaction.update({})
         } else {
-            console.error("INVALID INTERACTION ID: ", interaction.id)
+            logger.error("INVALID INTERACTION ID: ", interaction.id)
             return;
         }
 
@@ -170,13 +172,7 @@ export const runClient = ({onAcceptBeatmap, onPostSubmission, onRejectSubmission
     }
 
     return client.login(token).then(() => {
-        console.log("Discord Client Logged in!");
+        logger.info("Discord Client Logged in!");
         client.user?.setPresence({ activities: [{ name: config['bot-status'], url: config['bot-status-url'], type: config['bot-status-type'] }], status: 'online' });
-        try {
-            client.user?.setAvatar(config['bot-avatar'])
-        } catch (_) {
-            console.log("(Failed to set avatar, we'll keep going)")
-            // Ignore, we're fine.
-        }
     })
 }
