@@ -74,6 +74,10 @@ export const runUserServer = ({getUserInfoFromUniqueId, createNewUser, postHighS
             returnError(res, `Invalid type for 'username': ${usernameType}`)
             return
         }
+        if (username.length > 20) {
+            returnError(res, `Username must be 20 characters or less (yours is ${username.length})`)
+            return
+        }
         createNewUser(username).then(uniqueId => {
             res.set('Content-Type', 'application/json')
             res.send({

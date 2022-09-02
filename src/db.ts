@@ -27,7 +27,7 @@ const packages = new JSONdb('./db/public/packages.json');
 const submissions = new JSONdb('./db/public/submissions.json');
 const users = new JSONdb('./db/private/users.json')
 const highscores = new JSONdb('./db/public/highscores.json')
-const lowscores = new JSONdb('./db/public/lowscores.json')
+const lowscores = new JSONdb('./db/public/lowscores-hidden.json')
 
 if (!packages.has('packages'))
     packages.set('packages', [])
