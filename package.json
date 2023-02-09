@@ -6,6 +6,8 @@
   "scripts": {
     "start": "ts-node ./src/index.ts",
     "download-legacy": "ts-node ./src/legacy.ts",
+    "download": "ts-node ./src/download-package-manual.ts",
+    "delete": "ts-node ./src/delete-package-manual.ts",
     "refresh": "ts-node ./src/refresh.ts"
   },
   "keywords": [],
