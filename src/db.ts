@@ -1,8 +1,7 @@
 import { Database } from 'sqlite3'
-import { existsSync, mkdirSync } from 'fs';
+import { existsSync, mkdirSync, rmSync } from 'fs';
 import * as fs from 'fs'
 import { basename, dirname, relative } from 'path'
-import { get, set } from 'lodash'
 
 import JSONdb = require('simple-json-db')
 import download = require('download')
@@ -181,10 +180,10 @@ export const packageDownloaded = (url : string) : boolean => {
     return false
 }
 
-export const downloadBeatmapPackage = (url : string, time : Date | undefined = undefined) : Promise<void> => {
+export const downloadBeatmapPackage = (url : string, name : string, time : Date | undefined = undefined) : Promise<void> => {
     return new Promise<void>((resolve, reject) => {
         // 1) Download zip file to db/packages
-        let filename = 'db/public/packages/' + basename(new URL(url).pathname)
+        let filename = 'db/public/packages/' + name
         logger.info("DOWNLOADING PACKAGE: ", url, " => ", filename)
         // Make unique in the event that there are duplicates
         if (existsSync(filename)) {
@@ -204,6 +203,32 @@ export const downloadBeatmapPackage = (url : string, time : Date | undefined = u
             deleteSubmission(url)
             resolve()
         })
+    })
+}
+
+export const deletePackage = (packageFileName : string) : Promise<void> => {
+    return new Promise<void>((resolve, reject) => {
+        const filename = 'db/public/packages/' + packageFileName
+        const packageFilepath = 'packages/' + packageFileName
+        const list : IBeatmapPackage[] = packages.get('packages') as IBeatmapPackage[]
+        if (!list) {
+            reject("DB broken")
+            return
+        }
+        logger.info("DELETING PACKAGE ", packageFileName)
+        if (existsSync(filename)) {
+            rmSync(filename)
+            logger.info(`   (file at ${filename})`)
+        } else {
+            logger.info(`   (NO FILE FOUND at ${filename})`)    
+        }
+        const filtered = list.filter(pkg => pkg.filePath != packageFilepath)
+        if (filtered.length == list.length) {
+            logger.info(`   (NO PACKAGES FOUND with path ${packageFilepath})`)
+        } else {
+            packages.set('packages', filtered)
+            logger.info(`   (deleted ${list.length - filtered.length} package entries)`)
+        }
     })
 }
 
@@ -262,7 +287,7 @@ export const getUserInfo = (uniqueUserId : string) : Promise<IUserInfo> => {
 const setScore = (db : any, beatmapKey: string, username : string, score : IBeatmapHighScore) : Promise<void> => {
     return new Promise((resolve, reject) => {
         const toSet : any = db.get(beatmapKey) ?? {}
-        set(toSet, username, score)
+        toSet[username] = score
         db.set(beatmapKey, toSet)
         resolve()
     })
@@ -270,7 +295,8 @@ const setScore = (db : any, beatmapKey: string, username : string, score : IBeat
 
 const tryRegisterScore = (db: any, beatmapKey : string, username : string, score : IBeatmapHighScore, accept : (score : IBeatmapHighScore, prevRecord : IBeatmapHighScore) => boolean) : Promise<void> => {
     return new Promise((resolve, reject) => {
-        const prevRecord : IBeatmapHighScore = get(db.get(beatmapKey), username)
+        const beatmapRecords = db.get(beatmapKey)
+        const prevRecord : IBeatmapHighScore = !!beatmapRecords ? beatmapRecords[username] : undefined
         logger.info("        (prev record: ", prevRecord, ")")
         if (!!prevRecord && !!prevRecord.score) {
             if (accept(score, prevRecord)) {
