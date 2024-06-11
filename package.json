@@ -4,11 +4,11 @@
   "description": "",
   "main": "src/index.js",
   "scripts": {
-    "start": "ts-node ./src/index.ts",
-    "download-legacy": "ts-node ./src/legacy.ts",
-    "download": "ts-node ./src/download-package-manual.ts",
-    "delete": "ts-node ./src/delete-package-manual.ts",
-    "refresh": "ts-node ./src/refresh.ts"
+    "start": "sucrase-node ./src/index.ts",
+    "download-legacy": "sucrase-node ./src/legacy.ts",
+    "download": "sucrase-node ./src/download-package-manual.ts",
+    "delete": "sucrase-node ./src/delete-package-manual.ts",
+    "refresh": "sucrase-node ./src/refresh.ts"
   },
   "keywords": [],
   "author": "",
@@ -28,7 +28,7 @@
     "@types/sqlite3": "^3.1.8",
     "bad-words": "^3.0.4",
     "discord-api-types": "^0.27.3",
-    "discord.js": "^14.3.0",
+    "discord.js": "^14.8.0",
     "download": "^8.0.0",
     "express": "^4.17.3",
     "lodash": "^4.17.21",

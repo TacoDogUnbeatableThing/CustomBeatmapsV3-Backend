@@ -95,11 +95,28 @@ const parseZipEntry = (zip: any, entryPath : string, getBeatmap: (beatmap: IBeat
 // We also keep track of submissions so we can easily test them from the game.
 export const registerSubmission = (submission : IBeatmapSubmission) => {
     logger.info("NEW SUBMISSION: ", submission)
-    submissions.set(submission.downloadURL, submission)
+    const name = submission.fileName
+    const localURL = "submissions/" + name
+    downloadFile(submission.downloadURL, "db/public/" + localURL, false).then(filename => {
+        // TODO: Update CustomBeatmaps client to prepend this...
+        const globalURL = "http://64.225.60.116:8080/" + localURL
+
+        let resultSubmission = {...submission, fileName : name, downloadURL : globalURL}
+        submissions.set(name, resultSubmission)
+    })
+    
 }
-export const deleteSubmission = (downloadURL: string) => {
-    logger.info("DELETE SUBMISSION: ", downloadURL)
-    submissions.delete(downloadURL)
+export const deleteSubmission = (filename: string) => {
+    logger.info("DELETE SUBMISSION: ", filename)
+    let localPath = submissions.get(filename) as any
+    if (!!localPath && !!localPath["fileName"]) {
+        const filePath = 'db/public/submissions/' + localPath["fileName"]
+        if (existsSync(filePath)) {
+            rmSync(filePath)
+            logger.info(`   (also deleted file at ${filePath})`)
+        }
+    }
+    submissions.delete(filename)
 }
 
 const registerZipPackage = async (zipFilePath : string, time : Date | undefined = undefined) => {
@@ -180,13 +197,11 @@ export const packageDownloaded = (url : string) : boolean => {
     return false
 }
 
-export const downloadBeatmapPackage = (url : string, name : string, time : Date | undefined = undefined) : Promise<void> => {
-    return new Promise<void>((resolve, reject) => {
-        // 1) Download zip file to db/packages
-        let filename = 'db/public/packages/' + name
-        logger.info("DOWNLOADING PACKAGE: ", url, " => ", filename)
+const downloadFile = (url : string, defaultFilename : string, versioning : boolean) : Promise<string> => {
+    return new Promise<string>((resolve, reject) => {
+        let filename = defaultFilename
         // Make unique in the event that there are duplicates
-        if (existsSync(filename)) {
+        if (versioning && existsSync(filename)) {
             let ver = 1 // start at ver2
             let checkname
             do {
@@ -195,15 +210,19 @@ export const downloadBeatmapPackage = (url : string, name : string, time : Date 
             } while (existsSync(checkname))
             filename = checkname
         }
-        download(url, dirname(filename), {filename: basename(filename)}).then(async () => {
-            logger.info("        downloaded: ", filename)
-            // We have a new zip file, register it.
-            await registerZipPackage(filename, time)
-            // Clear whatever submission we may have had before
-            deleteSubmission(url)
-            resolve()
-        })
-    })
+
+        download(url, dirname(filename), {filename: basename(filename)}).then(() => resolve(filename))
+    });
+}
+
+export const downloadBeatmapPackage = (url : string, name : string, time : Date | undefined = undefined) : Promise<void> => {
+    const desiredFilename = 'db/public/packages/' + name
+    logger.info("DOWNLOADING PACKAGE: ", url, " => ", desiredFilename)
+    return downloadFile(url, desiredFilename, true).then(async (filename) => {
+        logger.info("        downloaded: ", filename)
+        // We have a new zip file, register it.
+        await registerZipPackage(filename, time)
+    });
 }
 
 export const deletePackage = (packageFileName : string) : Promise<void> => {

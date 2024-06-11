@@ -1,4 +1,4 @@
-import { Client, Message, TextChannel, GuildMember, GatewayIntentBits, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, APIActionRowComponent, APIMessageActionRowComponent, APITextInputComponent } from 'discord.js'
+import { Client, Message, TextChannel, GuildMember, GatewayIntentBits, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, APIActionRowComponent, APIMessageActionRowComponent, APITextInputComponent, Attachment } from 'discord.js'
 import { readFileSync } from "fs";
 
 import { IBeatmapSubmission } from './data'
@@ -6,9 +6,9 @@ import { IBeatmapSubmission } from './data'
 import { logger } from './publiclogger'
 
 interface IRunClientArguments {
-    onAcceptBeatmap : (beatmapURL : string, onComplete : () => void) => void;
+    onAcceptBeatmap : (attachmentName : string, beatmapURL : string, onComplete : () => void) => void;
     onPostSubmission : (submission : IBeatmapSubmission) => void;
-    onRejectSubmission : (downloadURL : string) => void;
+    onRejectSubmission : (attachmentName : string) => void;
     config : any
 }
 export const runClient = ({onAcceptBeatmap, onPostSubmission, onRejectSubmission, config} : IRunClientArguments) : Promise<void> => {
@@ -25,14 +25,12 @@ export const runClient = ({onAcceptBeatmap, onPostSubmission, onRejectSubmission
     const token = readFileSync('bot-secret.txt', 'utf8')
 
     const isUserSubmission = (message : Message<boolean>) : boolean =>  {
-        console.log(message)
-        console.log(message.attachments)
-	const attachmentName = message.attachments.at(0)?.attachment.toString()
+	const attachmentName = message.attachments.at(0)?.name.toString()
         return message.channelId === config["user-beatmap-submission-channel-id"]
                 && !!attachmentName
                 && (attachmentName.toLowerCase().endsWith(".zip") || attachmentName.toLowerCase().endsWith(".osz"));
     }
-    
+
     // The bot sent this and it is a poll that we have NOT answered yet
     const isBotSentUnansweredVerifierPoll = (message : Message<boolean>) : boolean => {
         if (message.channelId === config["mod-beatmap-verify-channel-id"] && client.user?.id === message.author.id) {
@@ -63,6 +61,13 @@ export const runClient = ({onAcceptBeatmap, onPostSubmission, onRejectSubmission
                 .setStyle(ButtonStyle.Danger)
         ];
     }
+
+    const getSubmissionFilename = (attachmentURL : string | null | undefined) => {
+        const attachmentURLParts = !!attachmentURL? attachmentURL.split('/') : []
+        return attachmentURLParts.length != 0
+            ? (attachmentURLParts[attachmentURLParts.length - 1]).split("?")[0]
+            : "ERROR"
+    }
     
     const receiveUserSubmission = (message : Message<boolean>) => {
         // Indicate we've received their submission
@@ -70,9 +75,11 @@ export const runClient = ({onAcceptBeatmap, onPostSubmission, onRejectSubmission
         const channel = client.channels.cache.get(config["mod-beatmap-verify-channel-id"]) as TextChannel
         const pollPrompt = `${config["approve-reaction"]} to accept and upload, ${config["reject-reaction"]} to reject (DM creator with reason)`
     
-        const attachmentURL = message.attachments.at(0)?.attachment.toString();
-        const attachmentURLParts = !!attachmentURL? attachmentURL.split('/') : []
-        const attachmentName = attachmentURLParts.length != 0? attachmentURLParts[attachmentURLParts.length - 1] : "(error: none)"
+        const attachment = message.attachments.at(0)
+
+        const attachmentURL = attachment?.url.toString();
+        const attachmentName = getSubmissionFilename(attachmentURL)
+
         const avatarURL = message.author.avatarURL()
         const embed = new EmbedBuilder()
                 .setColor('#0099FF')
@@ -94,6 +101,7 @@ export const runClient = ({onAcceptBeatmap, onPostSubmission, onRejectSubmission
                 onPostSubmission({
                     username: message.author.username,
                     avatarURL: !!avatarURL? avatarURL : "",
+                    fileName : attachmentName,
                     downloadURL: attachmentURL
                 })
             }
@@ -132,6 +140,8 @@ export const runClient = ({onAcceptBeatmap, onPostSubmission, onRejectSubmission
         const username = message.embeds[0]?.author?.name
         const userAvatar = message.embeds[0]?.thumbnail?.url
 
+        const attachmentName = getSubmissionFilename(downloadURL)
+
         if (interaction.customId === 'accept') {
             accepted = true;
             appendVerifierLog(`ACCEPTED by ${interaction.user.toString()}`, message, [])
@@ -143,8 +153,8 @@ export const runClient = ({onAcceptBeatmap, onPostSubmission, onRejectSubmission
                     .setStyle(ButtonStyle.Secondary)
             appendVerifierLog(`REJECTED by ${interaction.user.toString()}`, message, [reopenButton])
             // Remove our submission
-            if (!!downloadURL)
-                onRejectSubmission(downloadURL)
+            if (!!attachmentName)
+                onRejectSubmission(attachmentName)
             interaction.update({})
         } else if (interaction.customId === 'reopen') {
             const buttons = getDefaultMessageButtons()
@@ -154,6 +164,7 @@ export const runClient = ({onAcceptBeatmap, onPostSubmission, onRejectSubmission
                 onPostSubmission({
                     username: username,
                     avatarURL: !!userAvatar? userAvatar : "",
+                    fileName : attachmentName,
                     downloadURL: downloadURL
                 })
             }
@@ -168,7 +179,7 @@ export const runClient = ({onAcceptBeatmap, onPostSubmission, onRejectSubmission
             if (!!downloadURL) {
                 // TODO: Notify user that their beatmap has been accepted?
                 // Accept server side
-                onAcceptBeatmap(downloadURL, () => interaction.update({}))
+                onAcceptBeatmap(attachmentName, downloadURL, () => interaction.update({}))
             }
         }
     });

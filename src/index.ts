@@ -24,8 +24,9 @@ exec(`http-server db/public --port ${config["public-data-server-port"]}`, (error
 
 // Discord client
 runClient({
-    onAcceptBeatmap : (beatmapURL, onComplete) => {
+    onAcceptBeatmap : (attachmentName, beatmapURL, onComplete) => {
         let filename = basename(new URL(beatmapURL).pathname)
+        deleteSubmission(attachmentName)
         downloadBeatmapPackage(beatmapURL, filename).then(() => onComplete())
     },
     onPostSubmission : registerSubmission,
