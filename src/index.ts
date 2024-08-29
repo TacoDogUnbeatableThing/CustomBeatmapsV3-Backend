@@ -3,7 +3,7 @@ import { readFileSync } from "fs";
 import { basename } from 'path';
 import { exec } from 'child_process'
 
-import { downloadBeatmapPackage, registerSubmission, deleteSubmission, getUserInfo, registerNewUser, registerScoreUserId } from "./db";
+import { downloadBeatmapPackage, registerSubmission, deleteSubmission, registerZipPackage, getUserInfo, registerNewUser, registerScoreUserId } from "./db";
 import { runUserServer } from "./user-server";
 import { logger } from './publiclogger'
 
@@ -26,8 +26,16 @@ exec(`http-server db/public --port ${config["public-data-server-port"]}`, (error
 runClient({
     onAcceptBeatmap : (attachmentName, beatmapURL, onComplete) => {
         let filename = basename(new URL(beatmapURL).pathname)
-        deleteSubmission(attachmentName)
-        downloadBeatmapPackage(beatmapURL, filename).then(() => onComplete())
+
+        downloadBeatmapPackage(beatmapURL, filename).then(() => {
+            console.log("Downloaded: ", filename)
+            registerZipPackage("db/public/submissions/" + filename).then(() => {
+                console.log("Registered: ", filename)
+                deleteSubmission(attachmentName)
+                console.log("Deleted: ", filename)
+                onComplete()    
+            })
+        })
     },
     onPostSubmission : registerSubmission,
     onRejectSubmission : deleteSubmission,

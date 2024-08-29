@@ -119,7 +119,7 @@ export const deleteSubmission = (filename: string) => {
     submissions.delete(filename)
 }
 
-const registerZipPackage = async (zipFilePath : string, time : Date | undefined = undefined) => {
+export const registerZipPackage = async (zipFilePath : string, time : Date | undefined = undefined) => {
 
     const fileStats = await fs.promises.stat(zipFilePath)
 
