@@ -29,12 +29,9 @@ runClient({
 
         downloadBeatmapPackage(beatmapURL, filename).then(() => {
             console.log("Downloaded: ", filename)
-            registerZipPackage("db/public/submissions/" + filename).then(() => {
-                console.log("Registered: ", filename)
-                deleteSubmission(attachmentName)
-                console.log("Deleted: ", filename)
-                onComplete()    
-            })
+            deleteSubmission(attachmentName)
+            console.log("Deleted: ", filename)
+            onComplete()
         })
     },
     onPostSubmission : registerSubmission,
